@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hDOOM Box</title>
+    <link rel="icon" type="image/png" href="/static/static/lg1.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+    <style>
+        :root { --accent: #E60000; --bg: #000000; --card-bg: #0A0A0A; }
+        body { font-family: 'Outfit', sans-serif; background-color: var(--bg); color: #fff; overflow-x: hidden; user-select: none; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .ambient-light { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at 50% 0%, rgba(230,0,0,0.15) 0%, transparent 60%); pointer-events: none; z-index: 0; }
+        .bg-logo { position: fixed; top: 50%; left: 50%; width: 60vh; height: 60vh; background-image: url('/static/static/lg1.png'); background-position: center; background-repeat: no-repeat; background-size: contain; transform: translate(-50%, -50%); opacity: 0.04; filter: blur(5px); z-index: -1; animation: breathe 8s infinite alternate; }
+        @keyframes breathe { from { opacity: 0.04; transform: translate(-50%, -50%) scale(1); } to { opacity: 0.08; transform: translate(-50%, -50%) scale(1.05); } }
+        .scanline { width: 100%; height: 100px; z-index: 2; background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(255, 0, 0, 0.02) 50%, rgba(0,0,0,0) 100%); opacity: 0.1; position: fixed; bottom: 100%; animation: scanline 10s linear infinite; pointer-events: none; }
+        @keyframes scanline { 0% { bottom: 100%; } 100% { bottom: -100%; } }
+
+        .nav-item { cursor: pointer; padding: 0.5rem 1.5rem; border-radius: 999px; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.05em; transition: all 0.3s; color: #666; border: 1px solid transparent; }
+        .nav-item:hover, .nav-item.active { color: #fff; background: rgba(255,255,255,0.05); border-color: #333; }
+        .nav-item.active { border-color: var(--accent); color: var(--accent); }
+
+        .tilt-container { perspective: 1500px; }
+        .tilt-card { background: var(--card-bg); border: 1px solid #1A1A1A; border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); transform-style: preserve-3d; transition: all 0.3s ease-out; }
+        .soft-panel { background: var(--card-bg); border: 1px solid #1A1A1A; border-radius: 20px; }
+        .btn-glow { background: var(--bg); border: 1px solid #333; color: #fff; border-radius: 12px; transition: all 0.3s; cursor: pointer; }
+        .btn-glow:hover { border-color: var(--accent); box-shadow: 0 0 15px rgba(230,0,0,0.2); color: var(--accent); }
+        .loader { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        #turnstileOverlay { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s; }
+
+        .admin-controls { display: none; }
+        #modalOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); z-index: 100; align-items: center; justify-content: center; }
+        .modal-box { background: #0A0A0A; border: 1px solid #333; padding: 2rem; border-radius: 20px; text-align: center; max-width: 400px; width: 90%; box-shadow: 0 0 80px rgba(230,0,0,0.2); transform: scale(0.8); opacity: 0; animation: modalPop 0.3s ease-out forwards; }
+        @keyframes modalPop { to { transform: scale(1); opacity: 1; } }
+        #detailModal { backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-6 relative selection:bg-red-900 selection:text-white" oncontextmenu="return false;">
+
+    <script>
+        // Disable DevTools
+        document.addEventListener('keydown', function(e) {
+            // F12
+            if (e.keyCode === 123) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Ctrl+U
+            if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+U (view source)
+            if (e.ctrlKey && e.keyCode === 85) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+S (save page)
+            if (e.ctrlKey && e.keyCode === 83) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Detect DevTools opening
+        let devtools = {open: false, orientation: null};
+        const threshold = 160;
+        const emitEvent = (state, orientation) => {
+            window.dispatchEvent(new CustomEvent('devtoolschange', {detail: {open: state, orientation}}));
+        };
+
+        setInterval(() => {
+            const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+            const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+            const orientation = widthThreshold ? 'vertical' : 'horizontal';
+            
+            if (!(heightThreshold && widthThreshold) && ((window.Firebug && window.Firebug.chrome && window.Firebug.chrome.isInitialized) || widthThreshold || heightThreshold)) {
+                if (!devtools.open || devtools.orientation !== orientation) {
+                    emitEvent(true, orientation);
+                    devtools.open = true;
+                    devtools.orientation = orientation;
+                }
+            } else {
+                if (devtools.open) {
+                    emitEvent(false, null);
+                    devtools.open = false;
+                    devtools.orientation = null;
+                }
+            }
+        }, 500);
+
+        window.addEventListener('devtoolschange', e => {
+            if (e.detail.open) {
+                document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#000;color:#E60000;font-size:24px;font-weight:bold;"⚠️ DevTools Detected - Access Denied</div>';
+            }
+        });
+
+        // Disable right-click on specific elements
+        document.addEventListener('contextmenu', e => e.preventDefault());
+    </script>
+
+    <div class="ambient-light"></div>
+    <div class="bg-logo"></div>
+    <div class="scanline"></div>
+
+    <!-- CLOUDFLARE GATE -->
+    <div id="turnstileOverlay">
+        <div class="mb-8 text-center">
+            <h1 class="text-3xl font-black text-white mb-2">hDOOM <span class="text-[#E60000]">Box</span></h1>
+            <p class="text-zinc-500 text-xs tracking-widest uppercase">Security Check</p>
+        </div>
+        <div class="cf-turnstile" data-sitekey="1x00000000000000000000AA" data-callback="onTurnstileSuccess" data-theme="dark"></div>
+        <button id="bypassBtn" onclick="onTurnstileSuccess()" class="mt-6 text-[10px] text-zinc-600 hover:text-white tracking-widest hidden animate-pulse">MANUAL ENTER</button>
+    </div>
+
+    <!-- Modals -->
+    <div id="modalOverlay">
+        <div class="modal-box">
+            <h3 id="modalTitle" class="text-xl font-bold text-white mb-2">Notification</h3>
+            <p id="modalMsg" class="text-zinc-400 text-sm mb-6">Message</p>
+            <div id="modalActions" class="flex justify-center gap-3"></div>
+        </div>
+    </div>
+
+    <header class="relative z-20 flex flex-col items-center gap-6 mb-12 w-full max-w-6xl mx-auto">
+        <div class="flex items-center gap-4 animate-fade-in-up">
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#1a1a1a] to-black flex items-center justify-center border border-[#333]">
+                <img src="/static/static/lg1.png" class="w-8 h-8 object-contain">
+            </div>
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight text-white">hDOOM <span class="text-[#E60000]">Box</span></h1>
+                <div class="text-[10px] text-zinc-500 font-bold tracking-[0.2em] uppercase">Deep Malware Analysis</div>
+            </div>
+        </div>
+
+        <nav class="flex gap-2 p-1.5 bg-[#050505] border border-[#1A1A1A] rounded-full backdrop-blur-md">
+            <div class="nav-item active" data-tab="scanner">SCANNER</div>
+            <div class="nav-item" data-tab="history">SCANNED FILES</div>
+            <div class="nav-item" data-tab="news">LATEST NEWS</div>
+            <div class="nav-item" data-tab="about">ABOUT</div>
+            <div class="relative" id="langDropdown">
+                <button id="langBtn" onclick="toggleLangMenu(event)" class="px-4 py-2 rounded-full bg-[#0A0A0A] border border-[#1A1A1A] text-white text-xs font-bold hover:border-red-900 transition-colors">
+                    EN ▼
+                </button>
+                <div id="langMenu" class="absolute right-0 mt-2 w-28 bg-[#080808] border border-[#222] rounded-xl overflow-hidden hidden shadow-2xl z-50">
+                    <button onclick="changeLang('EN')" class="w-full text-left px-4 py-2 text-xs hover:bg-[#151515] text-zinc-300 hover:text-white">English</button>
+                    <button onclick="changeLang('AR')" class="w-full text-left px-4 py-2 text-xs hover:bg-[#151515] text-zinc-300 hover:text-white">العربية</button>
+                    <button onclick="changeLang('FR')" class="w-full text-left px-4 py-2 text-xs hover:bg-[#151515] text-zinc-300 hover:text-white">Français</button>
+                    <button onclick="changeLang('RU')" class="w-full text-left px-4 py-2 text-xs hover:bg-[#151515] text-zinc-300 hover:text-white">Русский</button>
+                </div>
+            </div>
+        </nav>
+
+        <div id="authContainer" class="absolute right-0 top-2 flex gap-2">
+            <div class="relative admin-controls" id="exportDropdown">
+                <button onclick="toggleExportMenu(event)" class="w-8 h-8 rounded-full bg-[#111] border border-[#333] flex items-center justify-center hover:border-red-900 transition-colors">
+                    <svg class="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                </button>
+                <div id="exportMenu" class="absolute right-0 mt-2 w-40 bg-[#080808] border border-[#222] rounded-xl overflow-hidden hidden shadow-2xl z-50">
+                    <div class="px-3 py-2 text-[9px] text-zinc-600 font-bold uppercase tracking-wider">Export As</div>
+                    <button onclick="downloadDB('host_port')" class="w-full text-left px-4 py-2 text-xs hover:bg-[#151515] text-zinc-300 hover:text-white">Host:Port</button>
+                    <button onclick="downloadDB('host_port_key')" class="w-full text-left px-4 py-2 text-xs hover:bg-[#151515] text-zinc-300 hover:text-white">Host:Port:Key</button>
+                    <button onclick="downloadDB('all')" class="w-full text-left px-4 py-2 text-xs hover:bg-[#151515] text-zinc-300 hover:text-white">Full JSON</button>
+                </div>
+            </div>
+            <div id="claimArea"></div>
+        </div>
+    </header>
+
+    <main class="relative z-10 flex-grow w-full max-w-6xl mx-auto min-h-[600px]">
+        
+        <div id="view-scanner" class="view-section w-full h-full flex flex-col items-center">
+            <div id="uploadSection" class="tilt-container w-full max-w-xl h-80 cursor-pointer mb-8 mt-10">
+                <div id="tiltCard" class="tilt-card tilt-target w-full h-full flex flex-col items-center justify-center relative group overflow-hidden">
+                    <input type="file" id="fileInput" class="absolute inset-0 opacity-0 z-50 cursor-pointer" accept=".exe">
+                    <div class="transform translate-z-20 flex flex-col items-center gap-6 transition-transform group-hover:scale-105 duration-500 pointer-events-none">
+                        <div class="w-20 h-20 rounded-3xl bg-[#080808] border border-[#222] flex items-center justify-center group-hover:border-red-900 transition-colors shadow-2xl relative">
+                            <img src="/static/static/lg1.png" class="w-10 h-10 opacity-50 group-hover:opacity-100 transition-opacity">
+                        </div>
+                        <div class="text-center">
+                            <h2 class="text-xl font-bold text-white tracking-wide">Upload Artifact</h2>
+                            <p class="text-xs text-zinc-500 mt-2 font-medium">Drag & Drop Executable</p>
+                        </div>
+                    </div>
+                    <div class="absolute inset-0 bg-gradient-to-t from-red-900/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                    <div id="loaderOverlay" class="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-40 hidden backdrop-blur-sm rounded-[23px]">
+                        <span class="loader mb-4"></span>
+                        <span class="text-[10px] text-white tracking-[0.2em] animate-pulse">ANALYZING...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resultsGrid" class="hidden w-full grid-cols-1 lg:grid-cols-3 gap-6 fade-in">
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="soft-panel p-6">
+                        <div class="text-[10px] text-zinc-500 font-bold tracking-wider mb-4 uppercase">Target Info</div>
+                        <div class="space-y-4">
+                            <div class="flex justify-between"><span class="text-zinc-600 text-xs">File</span><span class="text-white text-xs font-mono truncate w-32" id="resFilename">-</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-600 text-xs">Size</span><span class="text-white text-xs font-mono" id="resSize">-</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-600 text-xs">Time</span><span class="text-red-500 text-xs font-mono" id="resTime">-</span></div>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-[#1A1A1A]">
+                             <button onclick="resetScanner()" class="w-full btn-glow py-2 text-xs font-bold">CLEAN / NEW SCAN</button>
+                        </div>
+                    </div>
+                    <div class="soft-panel p-6">
+                        <div class="flex justify-between items-center mb-4"><div class="text-[10px] text-zinc-500 font-bold tracking-wider uppercase">Hashes</div></div>
+                        <div class="space-y-3" id="hashesContainer"></div>
+                    </div>
+                </div>
+                <div class="lg:col-span-2">
+                    <div class="soft-panel p-8 h-full min-h-[500px] relative overflow-hidden flex flex-col">
+                        <div class="absolute top-0 right-0 w-40 h-40 bg-red-900/10 blur-[60px] rounded-full pointer-events-none"></div>
+                        <div class="flex justify-between items-start mb-8 relative z-10">
+                            <div>
+                                <div class="text-[10px] text-red-500 font-bold tracking-widest mb-1">DETECTED FAMILY</div>
+                                <h2 class="text-3xl font-black text-white" id="resFamily">UNKNOWN</h2>
+                            </div>
+                            <button onclick="copyConfig()" class="btn-glow px-4 py-1.5 text-[10px] font-bold border-zinc-800 hover:border-white">COPY CONFIG</button>
+                        </div>
+                        <div class="space-y-3 overflow-y-auto max-h-[600px] pr-2 flex-grow relative z-10" id="configContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-history" class="view-section hidden w-full fade-in">
+            <div class="soft-panel w-full p-8 min-h-[600px]">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold flex items-center gap-3">
+                        <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                        Scanned Files Database
+                    </h2>
+                    <button onclick="deleteAll()" class="admin-controls px-4 py-2 bg-red-900/20 border border-red-900 text-red-500 text-xs rounded-lg hover:bg-red-900 hover:text-white transition-colors font-bold">DELETE ALL</button>
+                </div>
+                <div id="historyContainer" class="grid grid-cols-1 gap-4"></div>
+            </div>
+        </div>
+
+        <!-- Detail View Modal -->
+        <div id="detailModal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-[#0A0A0A] border border-[#333] rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="p-6 border-b border-[#222] flex justify-between items-center">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-3">
+                        <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                        Scan Details
+                    </h3>
+                    <button onclick="closeDetailModal()" class="text-zinc-400 hover:text-white transition-colors">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="detailContent" class="p-6 overflow-y-auto flex-1"></div>
+                <div class="p-4 border-t border-[#222] flex justify-end gap-3">
+                    <button onclick="copyDetailData()" class="px-4 py-2 bg-[#111] border border-[#333] text-white text-sm rounded-lg hover:border-red-900 transition-colors">Copy All</button>
+                    <button onclick="closeDetailModal()" class="px-4 py-2 bg-red-900 text-white text-sm rounded-lg hover:bg-red-800 transition-colors">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-news" class="view-section hidden w-full fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="admin-controls w-full mb-10 soft-panel p-6">
+                    <h3 class="text-sm font-bold text-red-500 mb-4">PUBLISH NEWS</h3>
+                    <div class="grid gap-4">
+                        <input id="newsTitle" placeholder="Title" class="bg-[#050505] border border-[#222] p-2 rounded text-sm text-white focus:border-red-900 outline-none">
+                        <input id="newsImg" placeholder="Image URL (Optional)" class="bg-[#050505] border border-[#222] p-2 rounded text-sm text-white focus:border-red-900 outline-none">
+                        <textarea id="newsContent" placeholder="Content..." class="bg-[#050505] border border-[#222] p-2 rounded text-sm text-white focus:border-red-900 outline-none h-24"></textarea>
+                        <button onclick="postNews()" class="btn-glow py-2 text-xs font-bold">POST NEWS</button>
+                    </div>
+                </div>
+                <div id="newsFeed" class="space-y-8"></div>
+            </div>
+        </div>
+
+        <div id="view-about" class="view-section hidden w-full fade-in flex flex-col items-center justify-center pt-10">
+            <div class="w-full max-w-2xl text-center space-y-12">
+                <div class="space-y-4">
+                    <div class="w-24 h-24 mx-auto rounded-full bg-[#111] border border-[#222] flex items-center justify-center mb-6">
+                        <img src="/static/static/lg1.png" class="w-12 h-12 opacity-80">
+                    </div>
+                    <h2 class="text-4xl font-black text-white">hDOOM Box</h2>
+                    <p class="text-zinc-500 max-w-md mx-auto">Advanced malware analysis sandbox.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 tilt-container">
+                    <div class="soft-panel p-6 tilt-target">
+                        <h3 class="text-red-500 font-bold mb-4 text-sm tracking-widest">DEVELOPER</h3>
+                        <span class="text-lg font-bold">@hQat</span>
+                        <div class="flex justify-center gap-4 mt-4">
+                            <a href="https://guns.lol/vb." class="text-zinc-600 hover:text-white text-xs">GUNS.LOL</a>
+                            <a href="https://youtube.com/@hqat.russian" class="text-zinc-600 hover:text-white text-xs">YOUTUBE</a>
+                        </div>
+                    </div>
+                    <div class="soft-panel p-6 tilt-target">
+                        <h3 class="text-zinc-500 font-bold mb-4 text-sm tracking-widest">SPECIAL GUESTS</h3>
+                        <div class="space-y-2 font-mono text-sm text-zinc-300">
+                            <div>@r3D #444</div>
+                            <div>@Sprrh</div>
+                            <div>@Jizani.NAR</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const uploadSection = document.getElementById('uploadSection');
+        const tiltCard = document.getElementById('tiltCard');
+        const fileInput = document.getElementById('fileInput');
+        const loader = document.getElementById('loaderOverlay');
+        const modal = document.getElementById('modalOverlay');
+        const turnstileOverlay = document.getElementById('turnstileOverlay');
+        let isAdmin = false;
+        let currentReport = null;
+
+        function onTurnstileSuccess(token) {
+            turnstileOverlay.style.opacity = '0';
+            setTimeout(() => turnstileOverlay.remove(), 500);
+            initAuth();
+        }
+        setTimeout(() => document.getElementById('bypassBtn').classList.remove('hidden'), 3500);
+
+        function showModal(title, msg, isConfirm = false, callback = null) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMsg').textContent = msg;
+            const act = document.getElementById('modalActions');
+            act.innerHTML = '';
+            if (isConfirm) {
+                const yes = document.createElement('button');
+                yes.className = 'btn-glow px-4 py-2 text-xs font-bold border-red-900 text-red-500 hover:bg-red-900 hover:text-white';
+                yes.textContent = 'CONFIRM';
+                yes.onclick = () => { modal.style.display = 'none'; if (callback) callback(); };
+                const no = document.createElement('button');
+                no.className = 'btn-glow px-4 py-2 text-xs font-bold';
+                no.textContent = 'CANCEL';
+                no.onclick = () => modal.style.display = 'none';
+                act.appendChild(yes); act.appendChild(no);
+            } else {
+                const ok = document.createElement('button');
+                ok.className = 'btn-glow px-4 py-2 text-xs font-bold';
+                ok.textContent = 'OK';
+                ok.onclick = () => modal.style.display = 'none';
+                act.appendChild(ok);
+            }
+            modal.style.display = 'flex';
+        }
+
+        async function initAuth() {
+            try {
+                const req = await fetch('/auth/status');
+                const res = await req.json();
+                isAdmin = res.is_admin;
+                if (isAdmin) document.querySelectorAll('.admin-controls').forEach(el => el.style.display = 'inline-block');
+                const claimArea = document.getElementById('claimArea');
+                if (!res.claimed) {
+                    claimArea.innerHTML = `<button onclick="claimAdmin()" class="btn-glow px-4 py-2 text-[10px] font-bold tracking-widest uppercase animate-pulse border-red-500 text-red-500">CLAIM ADMIN</button>`;
+                } else {
+                    claimArea.innerHTML = '';
+                }
+            } catch (e) {}
+        }
+
+        async function claimAdmin() {
+            const req = await fetch('/auth/claim', { method: 'POST' });
+            const res = await req.json();
+            if (res.status === 'success') {
+                showModal('Success', 'Admin Access Granted.', false);
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showModal('Error', res.message, false);
+            }
+        }
+
+        async function handleFile(file) {
+            if (!file) return;
+            loader.classList.remove('hidden');
+            const fd = new FormData();
+            fd.append('file', file);
+            try {
+                const req = await fetch('/api/extract', { method: 'POST', body: fd });
+                const res = await req.json();
+                currentReport = res;
+                renderReport(res);
+                switchTab('scanner'); // رجع للـ scanner بعد التحليل
+            } catch (e) {
+                showModal('Error', 'Analysis Failed', false);
+            }
+            loader.classList.add('hidden');
+        }
+
+        // Drag & Drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadSection.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); });
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadSection.addEventListener(eventName, () => {
+                tiltCard.classList.add('border-red-900', 'border-2', 'shadow-2xl', 'shadow-red-900/50');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadSection.addEventListener(eventName, () => {
+                tiltCard.classList.remove('border-red-900', 'border-2', 'shadow-2xl', 'shadow-red-900/50');
+            });
+        });
+
+        uploadSection.addEventListener('drop', e => {
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.toLowerCase().endsWith('.exe')) {
+                handleFile(file);
+            } else {
+                showModal('Invalid File', 'Please drop a valid .exe file', false);
+            }
+        });
+
+        function renderReport(data) {
+            document.getElementById('uploadSection').classList.add('hidden');
+            document.getElementById('resultsGrid').classList.remove('hidden');
+            document.getElementById('resFilename').textContent = data.meta.filename;
+            document.getElementById('resTime').textContent = data.meta.time;
+            document.getElementById('resSize').textContent = data.meta.size;
+            document.getElementById('resFamily').textContent = data.status === 'success' ? data.malware.Family.toUpperCase() : "CLEAN";
+
+            const hb = document.getElementById('hashesContainer'); hb.innerHTML = '';
+            for (let k in data.hashes) {
+                hb.innerHTML += `<div class="group cursor-pointer" onclick="navigator.clipboard.writeText('${data.hashes[k]}')">
+                    <div class="text-[#444] text-[9px] font-bold mb-1">${k}</div>
+                    <div class="text-zinc-500 text-[10px] truncate bg-[#050505] p-1.5 rounded border border-[#151515] group-hover:text-white">${data.hashes[k]}</div>
+                </div>`;
+            }
+
+            const cb = document.getElementById('configContainer'); cb.innerHTML = '';
+            if (data.status === 'success' && data.malware.Config) {
+                for (let k in data.malware.Config) {
+                    if (k === 'RAT Version') continue;
+                    let val = String(data.malware.Config[k]);
+                    let labelColor = (k.includes("C2") || k.includes("Key") || k.includes("Mutex") || k === "SPL") ? "text-red-500" : "text-zinc-400";
+                    
+                    let displayVal = val.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                    
+                    cb.innerHTML += `
+                    <div class="bg-[#050505] border border-[#151515] rounded-xl p-4 hover:border-[#333] transition-colors group">
+                        <div class="${labelColor} text-[10px] font-bold tracking-widest uppercase mb-2 select-none">${k}</div>
+                        <div class="text-zinc-300 text-xs font-mono break-all leading-relaxed pl-2 border-l-2 border-[#222] group-hover:border-red-900">${displayVal}</div>
+                    </div>`;
+                }
+            } else {
+                cb.innerHTML = `<div class="text-center text-zinc-700 text-xs py-20 border border-dashed border-[#222] rounded-xl">NO CONFIG EXTRACTED</div>`;
+            }
+        }
+
+        function copyConfig() {
+            if (!currentReport || !currentReport.malware?.Config) return;
+            let text = `${currentReport.malware.Family.toUpperCase()}\n\n`;
+            for (let k in currentReport.malware.Config) {
+                if (k !== 'RAT Version') {
+                    text += `${k}:\n${currentReport.malware.Config[k]}\n\n`;
+                }
+            }
+            navigator.clipboard.writeText(text);
+            showModal("Copied", "Configuration copied to clipboard.", false);
+        }
+
+        function resetScanner() {
+            document.getElementById('uploadSection').classList.remove('hidden');
+            document.getElementById('resultsGrid').classList.add('hidden');
+            fileInput.value = '';
+            currentReport = null;
+        }
+
+        async function loadHistory() {
+            const container = document.getElementById('historyContainer');
+            container.innerHTML = '<div class="text-center text-zinc-500 col-span-full py-12">Loading...</div>';
+            const data = await (await fetch('/api/history')).json();
+            container.innerHTML = '';
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div class="text-center text-zinc-500 col-span-full py-12">No scanned files yet.</div>';
+                return;
+            }
+
+            data.reverse().forEach(item => {
+                const cfg = item.malware?.Config || {};
+                let host = cfg['C2s'] || cfg['C2'] || cfg['Host'] || 'N/A';
+                if (typeof host === 'string' && host.includes('\n')) host = host.split('\n')[0];
+                
+                const delBtn = isAdmin ? `<button onclick="deleteItemConfirm(${item.id}, event)" class="px-3 py-1 bg-red-900/20 border border-red-900 text-red-500 text-[10px] rounded hover:bg-red-900 hover:text-white transition-colors font-bold">DELETE</button>` : '';
+                
+                container.innerHTML += `
+                    <div class="bg-[#050505] border border-[#1A1A1A] rounded-xl p-5 hover:border-red-900/50 transition-all cursor-pointer group" onclick="showDetailModal(${item.id})">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="px-2 py-1 bg-red-900/20 text-red-400 text-[10px] font-bold rounded">${item.malware.Family}</span>
+                                    <span class="text-[10px] text-zinc-600">${item.meta.date}</span>
+                                </div>
+                                <h3 class="text-white font-bold text-sm mb-1 group-hover:text-red-400 transition-colors">${item.meta.filename}</h3>
+                                <p class="text-xs text-zinc-500 mono truncate">${host}</p>
+                            </div>
+                            <div class="flex gap-2" onclick="event.stopPropagation()">
+                                <button onclick="copyItemData(${item.id}, event)" class="px-3 py-1 bg-[#111] border border-[#333] text-zinc-400 text-[10px] rounded hover:text-white hover:border-red-900 transition-colors font-bold">COPY</button>
+                                ${delBtn}
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 pt-3 border-t border-[#111]">
+                            <div class="text-center">
+                                <div class="text-[9px] text-zinc-600 uppercase">Size</div>
+                                <div class="text-xs text-zinc-400 font-bold">${item.meta.size}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-[9px] text-zinc-600 uppercase">MD5</div>
+                                <div class="text-xs text-zinc-400 font-mono truncate">${item.hashes.MD5.substring(0, 8)}...</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-[9px] text-zinc-600 uppercase">Version</div>
+                                <div class="text-xs text-zinc-400 font-bold">${item.malware.Version}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        async function loadNews() {
+            const feed = document.getElementById('newsFeed');
+            feed.innerHTML = '<div class="text-center text-zinc-600">Loading...</div>';
+            const data = await (await fetch('/api/news')).json();
+            feed.innerHTML = '';
+            if (data.length === 0) {
+                feed.innerHTML = '<div class="text-center text-zinc-600">No news yet.</div>';
+                return;
+            }
+            data.forEach(n => {
+                const imgHTML = n.image ? `<div class="w-full h-48 bg-cover bg-center rounded-lg mb-4 border border-[#222]" style="background-image: url('${n.image}')"></div>` : '';
+                const delBtn = isAdmin ? `<button onclick="deleteNews(${n.id})" class="text-[10px] text-red-500 hover:text-white">DELETE</button>` : '';
+                feed.innerHTML += `<div class="soft-panel p-6 tilt-target">${imgHTML}
+                    <div class="flex justify-between items-start mb-2">
+                        <h2 class="text-xl font-bold text-white">${n.title}</h2>
+                        <div class="flex flex-col items-end"><span class="text-[10px] text-zinc-500">${n.date}</span>${delBtn}</div>
+                    </div>
+                    <p class="text-sm text-zinc-400 leading-relaxed mb-4 whitespace-pre-wrap">${n.content}</p>
+                    <div class="flex items-center gap-2 border-t border-[#1A1A1A] pt-3">
+                        <svg class="w-4 h-4 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        <span class="text-xs text-zinc-500">${n.views} Views</span>
+                        <button onclick="viewNews(${n.id})" class="ml-auto text-xs text-zinc-600 hover:text-white">Read More</button>
+                    </div>
+                </div>`;
+            });
+            document.querySelectorAll('.tilt-target').forEach(applyTilt);
+        }
+
+        async function postNews() {
+            const title = document.getElementById('newsTitle').value.trim();
+            const content = document.getElementById('newsContent').value.trim();
+            const img = document.getElementById('newsImg').value.trim();
+            if (!title || !content) return showModal('Error', 'Title and Content are required', false);
+            await fetch('/api/news', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({title, content, image: img}) });
+            document.getElementById('newsTitle').value = ''; document.getElementById('newsContent').value = ''; document.getElementById('newsImg').value = '';
+            loadNews();
+        }
+
+        async function deleteNews(id) {
+            showModal('Delete News', 'Are you sure you want to delete this news article?', true, async () => {
+                await fetch(`/api/news/${id}`, { method: 'DELETE' });
+                loadNews();
+            });
+        }
+
+        async function viewNews(id) {
+            await fetch(`/api/news/${id}/view`, { method: 'POST' });
+            loadNews();
+        }
+
+        function deleteAll() {
+            showModal('Delete All', 'This will permanently delete ALL scanned files. Confirm?', true, async () => {
+                await fetch('/api/history/all', { method: 'DELETE' });
+                loadHistory();
+            });
+        }
+
+        function downloadDB(mode) {
+            window.location.href = `/api/export?mode=${mode}`;
+        }
+
+        // Toggle Language Menu
+        function toggleLangMenu(e) {
+            e.stopPropagation();
+            const menu = document.getElementById('langMenu');
+            const exportMenu = document.getElementById('exportMenu');
+            if (exportMenu) exportMenu.classList.add('hidden');
+            menu.classList.toggle('hidden');
+        }
+
+        // Toggle Export Menu
+        function toggleExportMenu(e) {
+            e.stopPropagation();
+            const menu = document.getElementById('exportMenu');
+            const langMenu = document.getElementById('langMenu');
+            if (langMenu) langMenu.classList.add('hidden');
+            menu.classList.toggle('hidden');
+        }
+
+        // Close menus when clicking outside
+        document.addEventListener('click', () => {
+            const langMenu = document.getElementById('langMenu');
+            const exportMenu = document.getElementById('exportMenu');
+            if (langMenu) langMenu.classList.add('hidden');
+            if (exportMenu) exportMenu.classList.add('hidden');
+        });
+
+        // Show Detail Modal
+        let historyData = [];
+        async function showDetailModal(id) {
+            if (historyData.length === 0) {
+                const data = await (await fetch('/api/history')).json();
+                historyData = data;
+            }
+            
+            const item = historyData.find(i => i.id === id);
+            if (!item) return;
+            
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+            
+            let configHTML = '<div class="space-y-3">';
+            
+            // Meta Information
+            configHTML += '<div class="bg-[#050505] border border-[#1A1A1A] rounded-lg p-4"><h4 class="text-sm font-bold text-red-400 mb-3 uppercase tracking-wider">File Information</h4>';
+            configHTML += `<div class="grid grid-cols-2 gap-3 text-xs">`;
+            configHTML += `<div><span class="text-zinc-600">Filename:</span> <span class="text-white font-bold">${item.meta.filename}</span></div>`;
+            configHTML += `<div><span class="text-zinc-600">Size:</span> <span class="text-white">${item.meta.size}</span></div>`;
+            configHTML += `<div><span class="text-zinc-600">Date:</span> <span class="text-white">${item.meta.date}</span></div>`;
+            configHTML += `<div><span class="text-zinc-600">Family:</span> <span class="text-red-400 font-bold">${item.malware.Family}</span></div>`;
+            configHTML += `</div></div>`;
+            
+            // Hashes
+            configHTML += '<div class="bg-[#050505] border border-[#1A1A1A] rounded-lg p-4"><h4 class="text-sm font-bold text-red-400 mb-3 uppercase tracking-wider">Hashes</h4>';
+            configHTML += `<div class="space-y-2 text-xs mono">`;
+            Object.entries(item.hashes).forEach(([k, v]) => {
+                configHTML += `<div class="flex justify-between items-center py-2 border-b border-[#111] last:border-0">
+                    <span class="text-zinc-600 font-bold">${k}:</span>
+                    <span class="text-zinc-400 select-all">${v}</span>
+                </div>`;
+            });
+            configHTML += `</div></div>`;
+            
+            // Malware Config
+            configHTML += '<div class="bg-[#050505] border border-[#1A1A1A] rounded-lg p-4"><h4 class="text-sm font-bold text-red-400 mb-3 uppercase tracking-wider">Configuration</h4>';
+            configHTML += `<div class="space-y-2 text-xs">`;
+            Object.entries(item.malware.Config || {}).forEach(([k, v]) => {
+                const displayValue = typeof v === 'string' && v.includes('\n') 
+                    ? v.split('\n').map(line => `<div class="py-1">${line}</div>`).join('') 
+                    : v;
+                configHTML += `<div class="py-2 border-b border-[#111] last:border-0">
+                    <div class="text-zinc-600 font-bold mb-1">${k}:</div>
+                    <div class="text-zinc-300 mono select-all break-all">${displayValue}</div>
+                </div>`;
+            });
+            configHTML += `</div></div>`;
+            
+            configHTML += '</div>';
+            
+            content.innerHTML = configHTML;
+            modal.classList.remove('hidden');
+            
+            // Store current item for copy function
+            window.currentDetailItem = item;
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.add('hidden');
+        }
+
+        function copyDetailData() {
+            if (!window.currentDetailItem) return;
+            const item = window.currentDetailItem;
+            
+            let text = `=== ${item.meta.filename} ===\n\n`;
+            text += `Family: ${item.malware.Family}\n`;
+            text += `Version: ${item.malware.Version}\n`;
+            text += `Date: ${item.meta.date}\n`;
+            text += `Size: ${item.meta.size}\n\n`;
+            
+            text += `=== HASHES ===\n`;
+            Object.entries(item.hashes).forEach(([k, v]) => {
+                text += `${k}: ${v}\n`;
+            });
+            
+            text += `\n=== CONFIGURATION ===\n`;
+            Object.entries(item.malware.Config || {}).forEach(([k, v]) => {
+                text += `${k}: ${v}\n`;
+            });
+            
+            navigator.clipboard.writeText(text);
+            showModal('Copied!', 'Configuration copied to clipboard', false);
+        }
+
+        async function copyItemData(id, e) {
+            e.stopPropagation();
+            if (historyData.length === 0) {
+                const data = await (await fetch('/api/history')).json();
+                historyData = data;
+            }
+            
+            const item = historyData.find(i => i.id === id);
+            if (!item) return;
+            
+            let text = `Family: ${item.malware.Family}\n`;
+            text += `Version: ${item.malware.Version}\n`;
+            Object.entries(item.malware.Config || {}).forEach(([k, v]) => {
+                text += `${k}: ${v}\n`;
+            });
+            
+            navigator.clipboard.writeText(text);
+            
+            // Visual feedback
+            e.target.textContent = '✓ COPIED';
+            setTimeout(() => { e.target.textContent = 'COPY'; }, 1500);
+        }
+
+        function deleteItemConfirm(id, e) {
+            e.stopPropagation();
+            showModal('Delete Item', 'Are you sure you want to delete this entry?', true, async () => {
+                await fetch(`/api/history/${id}`, { method: 'DELETE' });
+                historyData = []; // Reset cache
+                loadHistory();
+            });
+        }
+
+        // Tabs System - Fixed
+        function switchTab(tabName) {
+            document.querySelectorAll('.view-section').forEach(sec => sec.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+            document.querySelector(`.nav-item[data-tab="${tabName}"]`).classList.add('active');
+
+            if (tabName === 'history') loadHistory();
+            if (tabName === 'news') loadNews();
+        }
+
+        // Event listeners for tabs
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const tab = item.getAttribute('data-tab');
+                switchTab(tab);
+            });
+        });
+
+        fileInput.addEventListener('change', e => {
+            if (e.target.files[0]) handleFile(e.target.files[0]);
+        });
+
+        // Language System
+        const translations = {
+            EN: {
+                scanner: "SCANNER",
+                history: "SCANNED FILES",
+                news: "LATEST NEWS",
+                about: "ABOUT",
+                uploadTitle: "Upload Artifact",
+                uploadDesc: "Drag & Drop Executable",
+                analyzing: "Analyzing...",
+                fileName: "File Name",
+                fileSize: "File Size",
+                family: "Family",
+                version: "Version",
+                noData: "No data available",
+                copyAll: "Copy All",
+                viewDetails: "View Details"
+            },
+            AR: {
+                scanner: "الماسح",
+                history: "الملفات الممسوحة",
+                news: "آخر الأخبار",
+                about: "حول",
+                uploadTitle: "رفع ملف",
+                uploadDesc: "اسحب وأفلت الملف التنفيذي",
+                analyzing: "جاري التحليل...",
+                fileName: "اسم الملف",
+                fileSize: "حجم الملف",
+                family: "العائلة",
+                version: "الإصدار",
+                noData: "لا توجد بيانات",
+                copyAll: "نسخ الكل",
+                viewDetails: "عرض التفاصيل"
+            },
+            FR: {
+                scanner: "SCANNER",
+                history: "FICHIERS ANALYSÉS",
+                news: "DERNIÈRES NEWS",
+                about: "À PROPOS",
+                uploadTitle: "Télécharger",
+                uploadDesc: "Glisser-déposer l'exécutable",
+                analyzing: "Analyse en cours...",
+                fileName: "Nom du fichier",
+                fileSize: "Taille",
+                family: "Famille",
+                version: "Version",
+                noData: "Aucune donnée",
+                copyAll: "Tout copier",
+                viewDetails: "Voir les détails"
+            },
+            RU: {
+                scanner: "СКАНЕР",
+                history: "ОТСКАНИРОВАННЫЕ",
+                news: "НОВОСТИ",
+                about: "О НАС",
+                uploadTitle: "Загрузить файл",
+                uploadDesc: "Перетащите исполняемый файл",
+                analyzing: "Анализ...",
+                fileName: "Имя файла",
+                fileSize: "Размер",
+                family: "Семейство",
+                version: "Версия",
+                noData: "Нет данных",
+                copyAll: "Копировать всё",
+                viewDetails: "Детали"
+            }
+        };
+
+        let currentLang = 'EN';
+
+        function changeLang(lang) {
+            currentLang = lang;
+            document.getElementById('langBtn').textContent = lang + ' ▼';
+            document.getElementById('langMenu').classList.add('hidden');
+            
+            // Update nav items
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems[0].textContent = translations[lang].scanner;
+            navItems[1].textContent = translations[lang].history;
+            navItems[2].textContent = translations[lang].news;
+            navItems[3].textContent = translations[lang].about;
+            
+            // Update upload section
+            const uploadTitle = document.querySelector('#uploadSection h2');
+            const uploadDesc = document.querySelector('#uploadSection p');
+            if (uploadTitle) uploadTitle.textContent = translations[lang].uploadTitle;
+            if (uploadDesc) uploadDesc.textContent = translations[lang].uploadDesc;
+            
+            // Update analyzing text if visible
+            const analyzingText = document.querySelector('#uploadSection .text-xl');
+            if (analyzingText && analyzingText.textContent.includes('Analyzing')) {
+                analyzingText.textContent = translations[lang].analyzing;
+            }
+        }
+
+        function applyTilt(el) {
+            el.addEventListener('mousemove', e => {
+                const rect = el.getBoundingClientRect();
+                const xPct = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+                const yPct = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
+                el.style.transform = `perspective(1000px) rotateX(${yPct * -10}deg) rotateY(${xPct * 10}deg) scale3d(1.02,1.02,1.02)`;
+            });
+            el.addEventListener('mouseleave', () => {
+                el.style.transform = `perspective(1000px) rotateX(0) rotateY(0) scale3d(1,1,1)`;
+            });
+        }
+
+        document.querySelectorAll('.tilt-target').forEach(applyTilt);
+    </script>
+</body>
+</html>

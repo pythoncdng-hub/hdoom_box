@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+dotnetfile
+pycryptodome
+pefile
+aiofiles
+ppdeep
+blake3
