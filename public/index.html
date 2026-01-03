@@ -119,7 +119,6 @@
             <p class="text-zinc-500 text-xs tracking-widest uppercase">Security Check</p>
         </div>
         <div class="cf-turnstile" data-sitekey="0x4AAAAAACKUzSYXBgmasMt5" data-callback="onTurnstileSuccess" data-theme="dark"></div>
-        <button id="bypassBtn" onclick="onTurnstileSuccess()" class="mt-6 text-[10px] text-zinc-600 hover:text-white tracking-widest hidden animate-pulse">MANUAL ENTER</button>
     </div>
 
     <!-- Modals -->
@@ -327,7 +326,6 @@
             setTimeout(() => turnstileOverlay.remove(), 500);
             initAuth();
         }
-        setTimeout(() => document.getElementById('bypassBtn').classList.remove('hidden'), 3500);
 
         function showModal(title, msg, isConfirm = false, callback = null) {
             document.getElementById('modalTitle').textContent = title;
